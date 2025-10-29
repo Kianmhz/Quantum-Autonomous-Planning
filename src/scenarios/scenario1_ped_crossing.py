@@ -1,10 +1,7 @@
 # src/scenarios/scenario1_ped_crossing.py
-import time, math, random
+import time, random, math
 import carla
-from scenarios.helpers import (
-    fwd_vec, right_vec, move_behind, yaw_left_unit,
-    transform_on_other_side, label, follow_spectator
-)
+from .helpers import fwd_vec, right_vec, move_behind, transform_on_other_side, label, follow_spectator
 
 # ------- Scenario Parameters -------
 TOWN = "Town03"          # urban map
@@ -93,7 +90,7 @@ def main():
 
             # Maintain target speed
             v = ego.get_velocity()
-            speed = (v.x*v.x + v.y*v.y)**0.5  # speed in meters per second (m/s)
+            speed = math.hypot(v.x, v.y)
             throttle = 1 if speed < EGO_SPEED_MS else 0.0
             brake = 0.2 if speed > EGO_SPEED_MS + 0.5 else 0.0
             ego.apply_control(carla.VehicleControl(throttle=throttle, brake=brake, steer=0.0))
