@@ -1,8 +1,7 @@
-# src/scenarios/helpers.py
+# --- Geometry ---
 import math
 import carla
 
-# --- Geometry ---
 def fwd_vec(rot):
     yaw = math.radians(rot.yaw)
     return carla.Vector3D(math.cos(yaw), math.sin(yaw), 0.0)
@@ -47,15 +46,3 @@ def transform_on_other_side(world, base_tf, side="left",
     tf = target_wp.transform
     tf.location.z += up
     return tf
-
-# --- Utility ---
-def label(world, loc, text, color=carla.Color(0,255,0), life=10.0):
-    world.debug.draw_string(loc, text, False, color, life, True)
-
-def follow_spectator(world, target, dist=7.5, height=2.5):
-    spec = world.get_spectator()
-    tf = target.get_transform()
-    fwd = fwd_vec(tf.rotation)
-    cam_loc = tf.location - fwd * dist
-    cam_loc.z += height
-    spec.set_transform(carla.Transform(cam_loc, tf.rotation))

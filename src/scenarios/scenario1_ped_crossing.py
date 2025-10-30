@@ -1,7 +1,14 @@
 # src/scenarios/scenario1_ped_crossing.py
-import time, random, math
+import time, random
 import carla
-from .helpers import fwd_vec, right_vec, move_behind, transform_on_other_side, label, follow_spectator
+from .planning.config import PlanConfig
+from .planning.prediction import ped_predictor, is_ped_relevant
+from .planning.selector import choose_accel_for_tick
+
+from .common.geometry import fwd_vec, right_vec, move_behind, transform_on_other_side
+from .common.world import build_lane_polyline, follow_spectator
+from .common.control import accel_to_controls
+from .common.debug import label
 
 # ------- Scenario Parameters -------
 TOWN = "Town03"          # urban map
@@ -78,6 +85,13 @@ def main():
 
         world.debug.draw_string(ped_loc, "PED START", False,
                                 carla.Color(255,0,0), 10.0, True)
+        
+        cfg = PlanConfig(dt=SIM_DT, horizon_s=3.0, v_ref=EGO_SPEED_MS, d_safe=2.0)
+
+        # precompute ped predictor after spawn
+        dir_unit = carla.Vector3D(-right.x, -right.y, 0.0)
+        ped_pred = ped_predictor(ped_loc, dir_unit, PED_SPEED_MS)
+
 
         # Simulation loop
         ticks_to_delay = int(CROSS_DELAY_S / SIM_DT)
@@ -88,11 +102,20 @@ def main():
             world.tick()
             follow_spectator(world, ego)
 
-            # Maintain target speed
-            v = ego.get_velocity()
-            speed = math.hypot(v.x, v.y)
-            throttle = 1 if speed < EGO_SPEED_MS else 0.0
-            brake = 0.2 if speed > EGO_SPEED_MS + 0.5 else 0.0
+            # build lane & get v0 each tick (cheap)
+            lane_points, s0, v0 = build_lane_polyline(world, ego, max_m=200.0, ds=1.0)
+
+            # when ped is relevant -> plan; else cruise
+            if is_ped_relevant(ego, ped_loc, max_range=60.0):
+                name, cost, a0, diag = choose_accel_for_tick(v0, s0, lane_points, ped_pred, cfg)
+                throttle, brake = accel_to_controls(a0, v0, cfg.v_ref)
+                world.debug.draw_string(ego.get_location(),
+                                        f"{name or 'EMERGENCY'}  dmin={ (diag or {}).get('clearance_min','-') }",
+                                        False, carla.Color(0,255,255), 0.05, False)
+            else:
+                throttle = 1.0 if v0 < cfg.v_ref else 0.0
+                brake = 0.2 if v0 > cfg.v_ref + 0.5 else 0.0
+
             ego.apply_control(carla.VehicleControl(throttle=throttle, brake=brake, steer=0.0))
 
             # Trigger pedestrian crossing
