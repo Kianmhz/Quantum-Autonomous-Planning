@@ -25,5 +25,5 @@ def rollout_1d(v0, s0, a_profile, cfg: PlanConfig):
     return vs, ss
 
 def index_to_point(points, s_idx):
-    j = int(round(max(0, min(len(points)-1, s_idx))))
+    j = max(0, min(len(points)-1, int(round(s_idx))))
     return points[j]

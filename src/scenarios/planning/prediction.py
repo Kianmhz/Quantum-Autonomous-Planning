@@ -1,12 +1,15 @@
 import carla
 
 # constant-velocity pedestrian prediction
-def ped_predictor(ped_loc0, ped_dir_unit, ped_speed):
-    def pred(t: float):
+def ped_predictor(ped_loc0, dir_unit, speed, start_time=0.0):
+    def pred(t_world: float):
+        if t_world < start_time:
+            return ped_loc0
+        dt = t_world - start_time
         return carla.Location(
-            x=ped_loc0.x + ped_dir_unit.x * ped_speed * t,
-            y=ped_loc0.y + ped_dir_unit.y * ped_speed * t,
-            z=ped_loc0.z
+            ped_loc0.x + dir_unit.x * speed * dt,
+            ped_loc0.y + dir_unit.y * speed * dt,
+            ped_loc0.z
         )
     return pred
 
