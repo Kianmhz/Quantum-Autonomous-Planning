@@ -14,11 +14,14 @@ from .common.debug import label
 TOWN = "Town03"          # urban map
 EGO_SPEED_MS = 12        # desired speed (m/s)
 CROSS_DELAY_S = 1.0      # Δ when pedestrian steps off curb
-PED_SPEED_MS = 3.0        # walking speed
+PED_SPEED_MS = 3.2       # walking speed
 AHEAD_M = 43.0           # ped spawn ahead of ego
 LATERAL_M = 10.0         # to the right (curb)
 SIM_DT = 0.01            # simulation time step
-RUNTIME_S = 10.0
+RUNTIME_S = 10.0         # total scenario time
+PLANNING_DT = 0.10       # think at 10 Hz
+PLAN_EVERY = max(1, int(PLANNING_DT / SIM_DT))
+SMOOTH_ALPHA = 0.4       # 0..1, how fast we ease controls toward targets
 # -----------------------------------
 
 def set_sync(world, enabled=True, dt=SIM_DT):
@@ -86,7 +89,11 @@ def main():
         world.debug.draw_string(ped_loc, "PED START", False,
                                 carla.Color(255,0,0), 10.0, True)
         
-        cfg = PlanConfig(dt=SIM_DT, horizon_s=3.0, v_ref=EGO_SPEED_MS, d_safe=2.0)
+        cfg = PlanConfig(dt=PLANNING_DT, horizon_s=3.0, v_ref=EGO_SPEED_MS, d_safe=2.0)
+
+        # state for rate-limited controls
+        target_thr, target_brk = 0.0, 0.0
+        apply_thr,  apply_brk  = 0.0, 0.0
 
         # precompute ped predictor after spawn
         dir_unit = carla.Vector3D(-right.x, -right.y, 0.0)
@@ -102,21 +109,29 @@ def main():
             world.tick()
             follow_spectator(world, ego)
 
-            # build lane & get v0 each tick (cheap)
-            lane_points, s0, v0 = build_lane_polyline(world, ego, max_m=200.0, ds=1.0)
+            if tick % PLAN_EVERY == 0:
+                # Build lane & get v0 only at planning ticks
+                lane_points, s0, v0 = build_lane_polyline(world, ego, max_m=200.0, ds=1.0)
 
-            # when ped is relevant -> plan; else cruise
-            if is_ped_relevant(ego, ped_loc, max_range=60.0):
-                name, cost, a0, diag = choose_accel_for_tick(v0, s0, lane_points, ped_pred, cfg)
-                throttle, brake = accel_to_controls(a0, v0, cfg.v_ref)
-                world.debug.draw_string(ego.get_location(),
-                                        f"{name or 'EMERGENCY'}  dmin={ (diag or {}).get('clearance_min','-') }",
-                                        False, carla.Color(0,255,255), 0.05, False)
-            else:
-                throttle = 1.0 if v0 < cfg.v_ref else 0.0
-                brake = 0.2 if v0 > cfg.v_ref + 0.5 else 0.0
+                if is_ped_relevant(ego, ped.get_location(), max_range=60.0):
+                    name, cost, a0, diag = choose_accel_for_tick(v0, s0, lane_points, ped_pred, cfg)
+                    target_thr, target_brk = accel_to_controls(a0, v0, cfg.v_ref)
+                    world.debug.draw_string(
+                        ego.get_location(),
+                        f"{name or 'EMERGENCY'}  dmin={ (diag or {}).get('clearance_min','-') }",
+                        False, carla.Color(0,255,255), 0.05, False
+                    )
+                else:
+                    target_thr = 1.0 if v0 < cfg.v_ref else 0.0
+                    target_brk = 0.2 if v0 > cfg.v_ref + 0.5 else 0.0
 
-            ego.apply_control(carla.VehicleControl(throttle=throttle, brake=brake, steer=0.0))
+            # Smoothly approach targets every tick (prevents physics “kick” at 0.1 s steps)
+            def lerp(a, b, t): return a + t*(b-a)
+            apply_thr = lerp(apply_thr, target_thr, SMOOTH_ALPHA)
+            apply_brk = lerp(apply_brk, target_brk, SMOOTH_ALPHA)
+
+            ego.apply_control(carla.VehicleControl(throttle=apply_thr, brake=apply_brk, steer=0.0))
+
 
             # Trigger pedestrian crossing
             if tick == ticks_to_delay:
