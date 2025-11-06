@@ -1,14 +1,17 @@
 # src/scenarios/scenario1_ped_crossing.py
-import time, random, math
+import time, random
 import carla
-from .planning.config import PlanConfig
-from .planning.prediction import ped_predictor, is_ped_relevant
-from .planning.selector import choose_accel_for_tick
+import json
+from pathlib import Path
 
-from .common.geometry import fwd_vec, right_vec, move_behind, transform_on_other_side
-from .common.world import build_lane_polyline, follow_spectator
-from .common.control import accel_to_controls
-from .common.debug import label
+from src.planning.config import PlanConfig
+from src.planning.prediction import ped_predictor, is_ped_relevant
+from src.planning.selector import choose_accel_for_tick
+
+from src.common.geometry import fwd_vec, right_vec, move_behind, transform_on_other_side
+from src.common.world import build_lane_polyline, follow_spectator
+from src.common.control import accel_to_controls
+from src.common.debug import label
 
 # ------- Scenario Parameters -------
 TOWN = "Town03"          # urban map
@@ -18,7 +21,7 @@ PED_SPEED_MS = 6       # walking speed
 AHEAD_M = 43.0           # ped spawn ahead of ego
 LATERAL_M = 10.0         # to the right (curb)
 SIM_DT = 0.01            # simulation time step
-RUNTIME_S = 15.0         # total scenario time
+RUNTIME_S = 13.0         # total scenario time
 PLANNING_DT = 0.10       # think at 10 Hz
 PLAN_EVERY = max(1, int(PLANNING_DT / SIM_DT))
 SMOOTH_ALPHA = 0.4       # how fast we ease controls toward targets
@@ -94,6 +97,7 @@ def main():
             ped_loc, carla.Vector3D(-right.x, -right.y, 0.0),
             PED_SPEED_MS, start_time=ped_start_time
         )
+
         cfg = PlanConfig(dt=PLANNING_DT, horizon_s=3.0,
                          v_ref=EGO_SPEED_MS, d_safe=2.0)
 
@@ -103,6 +107,11 @@ def main():
         ticks_to_delay = int(CROSS_DELAY_S / SIM_DT)
         ticks_total = int(RUNTIME_S / SIM_DT)
         print("[Scenario] Starting. Pedestrian crosses after delay.")
+
+        # --- snapshot setup (once) ---
+        snapshot_written = False
+        snapshot_path = Path("snapshots/ped_scenario_tick.json")
+        snapshot_path.parent.mkdir(parents=True, exist_ok=True)
 
         # ---------------------------------------------------
         #  Simulation loop
@@ -124,13 +133,47 @@ def main():
                         t_world=sim_time, ego_half_width=ego_half_width
                     )
 
+                    # --- snapshot once when it's interesting ---
+                    if (not snapshot_written) and diag and diag.get("clearance_min", 99) < 8.0:
+                        ego_loc = ego.get_location()
+                        ego_vel = ego.get_velocity()
+                        ped_loc_now = ped.get_location()
+                        ped_vel_now = ped.get_velocity()
+
+                        snap = {
+                            "sim_time": sim_time,
+                            "ego": {
+                                "loc": [ego_loc.x, ego_loc.y, ego_loc.z],
+                                "vel": [ego_vel.x, ego_vel.y, ego_vel.z],
+                                "half_width": ego_half_width,
+                            },
+                            "ped": {
+                                "loc": [ped_loc_now.x, ped_loc_now.y, ped_loc_now.z],
+                                "vel": [ped_vel_now.x, ped_vel_now.y, ped_vel_now.z],
+                            },
+                            "cfg": {
+                                "dt": cfg.dt,
+                                "horizon_s": cfg.horizon_s,
+                                "v_ref": cfg.v_ref,
+                                "d_safe": cfg.d_safe,
+                            },
+                            "meta": {
+                                "tick": tick,
+                                "plan_every": PLAN_EVERY,
+                                "town": TOWN,
+                            },
+                        }
+                        snapshot_path.write_text(json.dumps(snap, indent=2))
+                        snapshot_written = True
+                        print(f"[Snapshot] Saved planning state to {snapshot_path}")
+
                     # Failsafe brake if too close
                     if diag and diag.get("clearance_min", 99) < 3.0:
                         a0 = -4.0
                         name = "failsafe_brake"
 
                     target_thr, target_brk = accel_to_controls(a0, v0, cfg.v_ref)
-                    
+
                     print(f"[Plan] tick={tick:05d} action={name} cost={cost:.2f} "
                           f"dmin={diag.get('clearance_min', 0):.2f}")
                 else:
