@@ -9,8 +9,8 @@ def make_accel_profiles(v0, cfg: PlanConfig):
         "comfort_brake": const(-2.0),
         "hard_brake": const(-4.0),
     }
-    if v0 > 0.5:
-        profiles["creep"] = const(-1.0)
+    if v0 > 1.0: # only consider creep if we're almost stopped
+        profiles["creep"] = const(-0.5)
     return profiles
 
 # project 1D along sampled polyline: index-as-distance (1 idx ≈ 1m)

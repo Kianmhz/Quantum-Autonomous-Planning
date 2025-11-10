@@ -30,6 +30,7 @@ def eval_candidate(a_profile, v0, s0, lane_points, ped_pred,
     v_err = sum((v - cfg.v_ref)**2 for v in vs)
     a_cost = sum(a*a for a in a_profile)
     j_cost = sum((a2 - a1)**2 for a1, a2 in zip(a_profile[:-1], a_profile[1:]))
-    J = 5*v_err + 2*a_cost + 1*j_cost
+    prox_penalty = sum(max(0, (cfg.d_safe + 2.0 - dmin))**2 for d in [dmin])
+    J = 5*v_err + 2*a_cost + 1*j_cost + 10*prox_penalty
 
     return True, J, {"clearance_min": dmin, "v_end": vs[-1]}

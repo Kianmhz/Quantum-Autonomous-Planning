@@ -11,21 +11,20 @@ from src.planning.selector import choose_accel_for_tick
 from src.common.geometry import fwd_vec, right_vec, move_behind, transform_on_other_side
 from src.common.world import build_lane_polyline, follow_spectator
 from src.common.control import accel_to_controls
-from src.common.debug import label
 from src.common.snapshot import save_snapshot
 
 # ------- Scenario Parameters -------
 TOWN = "Town03"          # urban map
-EGO_SPEED_MS = 13        # desired speed (m/s)
-CROSS_DELAY_S = 3.0      # Δ when pedestrian steps off curb
-PED_SPEED_MS = 6       # walking speed
-AHEAD_M = 43.0           # ped spawn ahead of ego
-LATERAL_M = 10.0         # to the right (curb)
+EGO_SPEED_MS = 9         # ≈ 32 km/h realistic city driving
+CROSS_DELAY_S = 4      # pedestrian starts crossing after 2 seconds
+PED_SPEED_MS = 2.5       # ≈ 9 km/h brisk walking
+AHEAD_M = 43.0           # keep this (avoids object collision)
+LATERAL_M = 8.0          # pedestrian crossing offset
 SIM_DT = 0.01            # simulation time step
-RUNTIME_S = 10.0         # total scenario time
-PLANNING_DT = 0.10       # think at 10 Hz
+RUNTIME_S = 12.0         # total scenario duration
+PLANNING_DT = 0.10       # plan at 10 Hz
 PLAN_EVERY = max(1, int(PLANNING_DT / SIM_DT))
-SMOOTH_ALPHA = 0.4       # how fast we ease controls toward targets
+SMOOTH_ALPHA = 0.4       # smooth control transitions
 # -----------------------------------
 
 def set_sync(world, enabled=True, dt=SIM_DT):
@@ -71,9 +70,6 @@ def main():
         )
         ego_tf = move_behind(ego_tf, 23.0)
 
-        label(world, base_sp.location, "BASE", carla.Color(0, 255, 0))
-        label(world, ego_tf.location, "OTHER SIDE", carla.Color(0, 200, 255))
-
         # Step 3: spawn ego
         ego = world.spawn_actor(ego_bp, ego_tf)
         actors.append(ego)
@@ -88,9 +84,6 @@ def main():
         ped = world.spawn_actor(walker_bp, ped_tf)
         actors.append(ped)
 
-        world.debug.draw_string(ped_loc, "PED START", False,
-                                carla.Color(255, 0, 0), 10.0, True)
-
         # --- Initialize prediction and control state ---
         sim_time = 0.0
         ped_start_time = float("inf")
@@ -100,7 +93,7 @@ def main():
         )
 
         cfg = PlanConfig(dt=PLANNING_DT, horizon_s=3.0,
-                         v_ref=EGO_SPEED_MS, d_safe=2.0)
+                         v_ref=EGO_SPEED_MS, d_safe=3.5)
 
         target_thr, target_brk = 0.0, 0.0
         apply_thr, apply_brk = 0.0, 0.0
@@ -169,12 +162,14 @@ def main():
                         }
                         snapshot_path.write_text(json.dumps(snap, indent=2))
                         snapshot_written = True
-                        print(f"[Snapshot] Saved planning state to {snapshot_path}")
 
                     # Failsafe brake if too close
-                    if diag and diag.get("clearance_min", 99) < 3.0:
-                        a0 = -4.0
-                        name = "failsafe_brake"
+                    if diag:
+                        dmin = diag.get("clearance_min", 99)
+                        if dmin < cfg.d_safe + 2.0:
+                            # pedestrian still close → creep instead of accelerating
+                            a0 = -0.5      # gentle hold
+                            name = "creep"
 
                     target_thr, target_brk = accel_to_controls(a0, v0, cfg.v_ref)
 
