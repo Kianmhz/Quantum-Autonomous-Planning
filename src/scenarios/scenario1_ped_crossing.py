@@ -93,7 +93,7 @@ def main():
         )
 
         cfg = PlanConfig(dt=PLANNING_DT, horizon_s=3.0,
-                         v_ref=EGO_SPEED_MS, d_safe=2)
+                         v_ref=EGO_SPEED_MS, d_safe=3)
 
         target_thr, target_brk = 0.0, 0.0
         apply_thr, apply_brk = 0.0, 0.0
