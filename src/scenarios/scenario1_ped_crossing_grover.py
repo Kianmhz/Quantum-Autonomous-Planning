@@ -1,8 +1,6 @@
 # src/scenarios/scenario1_ped_crossing.py
 import time, random
 import carla
-import json
-from pathlib import Path
 
 from src.planning.config import PlanConfig
 from src.planning.prediction import ped_predictor, is_ped_relevant
@@ -10,7 +8,6 @@ from src.planning.prediction import ped_predictor, is_ped_relevant
 from src.common.geometry import fwd_vec, right_vec, move_behind, transform_on_other_side
 from src.common.world import build_lane_polyline, follow_spectator
 from src.common.control import accel_to_controls
-from src.common.snapshot import save_snapshot
 
 from qiskit import QuantumCircuit, transpile
 from qiskit_aer import Aer
