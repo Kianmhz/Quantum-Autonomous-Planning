@@ -30,7 +30,7 @@ The system is organized into three conceptual layers:
 
 ### Architecture Diagram
 
-TBD
+![System Architecture](docs/architecture.png)
 
 ---
 
