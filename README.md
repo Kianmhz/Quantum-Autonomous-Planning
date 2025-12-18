@@ -146,8 +146,8 @@ Planned extensions include:
 
 - **Simulation:** CARLA  
 - **Quantum SDK:** Qiskit  
-- **Classical Planning:** Python  
-- **Decision Frequency:** 10 Hz  
+- **Source Code:** Python  
+- **Decision Frequency:** 20 Hz  
 
 ---
 
