@@ -1,0 +1,11 @@
+# Inferred external dependencies for the Quantum-Autonomous-Planning project
+# Note: some packages (e.g., CARLA) often require platform-specific wheels or
+# non-pip installation steps; please refer to CARLA documentation.
+
+carla
+numpy
+qiskit
+qiskit-aer
+torch
+opencv-python
+ultralytics
